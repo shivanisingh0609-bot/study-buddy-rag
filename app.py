@@ -1,86 +1,58 @@
 import os
 import streamlit as st
-from dotenv import load_dotenv
-
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import Chroma
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_community.chains import RetrievalQA
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 
-# Load API key
-load_dotenv()
-api_key = st.secrets.get("GOOGLE_API_KEY", os.getenv("GOOGLE_API_KEY"))
-os.environ["GOOGLE_API_KEY"] = api_key
+os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 
-# Streamlit UI
 st.set_page_config(page_title="Study Buddy RAG")
 st.title("📚 Study Buddy RAG")
 st.write("Upload your notes/PDF and ask questions!")
 
-# Upload PDF
 uploaded_file = st.file_uploader("Upload PDF", type="pdf")
 
 if uploaded_file:
-
-    # Save file temporarily
     with open("temp.pdf", "wb") as f:
         f.write(uploaded_file.read())
 
-    st.success("✅ File uploaded successfully!")
+    st.success("✅ File uploaded!")
 
-    # Step 1: Load PDF
     loader = PyPDFLoader("temp.pdf")
     documents = loader.load()
 
-    # Step 2: Chunking
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=100
-    )
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
     chunks = splitter.split_documents(documents)
 
-    # Step 3: Embeddings + Vector DB
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-
-    vectordb = Chroma.from_documents(
-        documents=chunks,
-        embedding=embeddings,
-        persist_directory="db"
-    )
-
-    # Step 4: Retriever
+    vectordb = Chroma.from_documents(chunks, embedding=embeddings)
     retriever = vectordb.as_retriever(search_kwargs={"k": 3})
 
-    # Step 5: Gemini LLM
     llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
 
-    # Step 6: QA Chain
-    qa_chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        retriever=retriever,
-        return_source_documents=True,
-        chain_type_kwargs={
-            "prompt": None
-        }
+    prompt = ChatPromptTemplate.from_template("""
+    Answer the question based only on the context below.
+    If you don't know, say "I don't know based on the document."
+    
+    Context: {context}
+    Question: {question}
+    """)
+
+    chain = (
+        {"context": retriever, "question": RunnablePassthrough()}
+        | prompt
+        | llm
+        | StrOutputParser()
     )
 
-    # User query
     query = st.text_input("❓ Ask a question:")
-
     if query:
-        response = qa_chain({"query": query})
-
-        answer = response["result"]
-        sources = response["source_documents"]
-
-        # Out-of-scope handling
-        if "i don't know" in answer.lower() or len(sources) == 0:
-            st.error("❌ Out of scope! Answer not found in document.")
+        answer = chain.invoke(query)
+        if "i don't know" in answer.lower():
+            st.error("❌ Answer not found in document.")
         else:
             st.success(answer)
-
-            st.subheader("📌 Source Chunks:")
-            for doc in sources:
-                st.write(doc.page_content[:200] + "...")
