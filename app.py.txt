@@ -1,0 +1,88 @@
+import os
+import streamlit as st
+from dotenv import load_dotenv
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import PyPDFLoader
+from langchain.vectorstores import Chroma
+from langchain.embeddings import GoogleGenerativeAIEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.chains import RetrievalQA
+
+# Load API key
+load_dotenv()
+
+# Streamlit UI
+st.set_page_config(page_title="Study Buddy RAG")
+st.title("📚 Study Buddy RAG")
+st.write("Upload your notes/PDF and ask questions!")
+
+# Upload PDF
+uploaded_file = st.file_uploader("Upload PDF", type="pdf")
+
+if uploaded_file:
+
+    # Save file temporarily
+    with open("temp.pdf", "wb") as f:
+        f.write(uploaded_file.read())
+
+    st.success("✅ File uploaded successfully!")
+
+    # Step 1: Load PDF
+    loader = PyPDFLoader("temp.pdf")
+    documents = loader.load()
+
+    # Step 2: Chunking
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=500,
+        chunk_overlap=100
+    )
+    chunks = splitter.split_documents(documents)
+
+    # Step 3: Embeddings + Vector DB
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+
+    vectordb = Chroma.from_documents(
+        documents=chunks,
+        embedding=embeddings,
+        persist_directory="db"
+    )
+
+    # Step 4: Retriever
+    retriever = vectordb.as_retriever(search_kwargs={"k": 3})
+
+    # Step 5: Gemini LLM
+    llm = ChatGoogleGenerativeAI(model="gemini-pro")
+
+    # Step 6: QA Chain with strict prompt
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=llm,
+        retriever=retriever,
+        return_source_documents=True,
+        chain_type_kwargs={
+            "prompt": """You are a Study Buddy AI.
+Answer ONLY from the provided document context.
+If answer is not present, say:
+"I don't know based on the document."
+"""
+        }
+    )
+
+    # User query
+    query = st.text_input("❓ Ask a question:")
+
+    if query:
+        response = qa_chain({"query": query})
+
+        answer = response["result"]
+        sources = response["source_documents"]
+
+        # Out-of-scope handling
+        if "i don't know" in answer.lower() or len(sources) == 0:
+            st.error("❌ Out of scope! Answer not found in document.")
+        else:
+            st.success(answer)
+
+            st.subheader("📌 Source Chunks:")
+            for doc in sources:
+                st.write(doc.page_content[:200] + "...")
