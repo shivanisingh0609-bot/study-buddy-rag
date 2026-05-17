@@ -2,15 +2,17 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import PyPDFLoader
-from langchain.vectorstores import Chroma
-from langchain.embeddings import GoogleGenerativeAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.vectorstores import Chroma
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains import RetrievalQA
 
 # Load API key
 load_dotenv()
+api_key = st.secrets.get("GOOGLE_API_KEY", os.getenv("GOOGLE_API_KEY"))
+os.environ["GOOGLE_API_KEY"] = api_key
 
 # Streamlit UI
 st.set_page_config(page_title="Study Buddy RAG")
@@ -52,19 +54,15 @@ if uploaded_file:
     retriever = vectordb.as_retriever(search_kwargs={"k": 3})
 
     # Step 5: Gemini LLM
-    llm = ChatGoogleGenerativeAI(model="gemini-pro")
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
 
-    # Step 6: QA Chain with strict prompt
+    # Step 6: QA Chain
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
         retriever=retriever,
         return_source_documents=True,
         chain_type_kwargs={
-            "prompt": """You are a Study Buddy AI.
-Answer ONLY from the provided document context.
-If answer is not present, say:
-"I don't know based on the document."
-"""
+            "prompt": None
         }
     )
 
