@@ -28,7 +28,7 @@ if uploaded_file:
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
     chunks = splitter.split_documents(documents)
 
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
     vectordb = Chroma.from_documents(chunks, embedding=embeddings)
     retriever = vectordb.as_retriever(search_kwargs={"k": 3})
 
