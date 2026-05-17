@@ -7,7 +7,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.chains import RetrievalQA
+from langchain_community.chains import RetrievalQA
 
 # Load API key
 load_dotenv()
