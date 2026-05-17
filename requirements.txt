@@ -1,4 +1,5 @@
-streamlit
+streamlit==1.35.0
+protobuf==3.20.3
 langchain-community
 langchain-google-genai
 langchain-text-splitters
