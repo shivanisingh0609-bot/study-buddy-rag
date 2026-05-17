@@ -1,4 +1,8 @@
 streamlit
 python-dotenv
 langchain
-openai
+langchain-community
+langchain-google-genai
+google-generativeai
+chromadb
+pypdf
